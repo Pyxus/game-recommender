@@ -50,7 +50,7 @@ pub mod igdb {
         pub async fn query(&self, end_point: &str, body: &str) -> Response {
             return self
                 .client
-                .post(format!("https://api.igdb.com/v4/games/{end_point}"))
+                .post(format!("https://api.igdb.com/v4/{end_point}"))
                 .header(
                     "Authorization",
                     format!("{} {}", self.auth.token_type, self.auth.access_token),

@@ -13,7 +13,7 @@ async fn main() {
     let mut igdb_wrapper = igdb::IGDBWrapper::new(client_id, client_secret);
     igdb_wrapper.refresh_auth().await;
 
-    let response = igdb_wrapper.query("", "fields name;")
+    let response = igdb_wrapper.query("games", "fields name;")
         .await
         .text()
         .await
