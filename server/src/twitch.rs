@@ -1,7 +1,6 @@
 pub mod igdb {
     use std::time::SystemTime;
     use serde::{Serialize, Deserialize};
-
     use reqwest::Response;
 
     #[derive(Serialize, Deserialize, Default)]
