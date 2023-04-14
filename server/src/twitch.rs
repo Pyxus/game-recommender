@@ -1,14 +1,7 @@
 pub mod igdb {
-    use std::time::SystemTime;
-    use serde::{Serialize, Deserialize};
     use reqwest::Response;
-
-    #[derive(Serialize, Deserialize, Default)]
-    pub struct Auth {
-        pub access_token: String,
-        pub expires_in: u64,
-        pub token_type: String,
-    }
+    use serde::{Deserialize, Serialize, de::DeserializeOwned};
+    use std::time::SystemTime;
 
     pub struct IGDBWrapper {
         auth: Auth,
@@ -16,6 +9,13 @@ pub mod igdb {
         client: reqwest::Client,
         client_id: String,
         client_secret: String,
+    }
+
+    #[derive(Serialize, Deserialize, Default)]
+    struct Auth {
+        access_token: String,
+        expires_in: u64,
+        token_type: String,
     }
 
     impl IGDBWrapper {
@@ -43,11 +43,15 @@ pub mod igdb {
                 .json::<Auth>()
                 .await
                 .expect("Failed to retreive Auth from JSON.");
-            
+
             self.auth_refreshed_at = SystemTime::now();
         }
 
-        pub async fn query(&self, end_point: &str, body: &str) -> Response {
+        pub async fn query<T: DeserializeOwned>(
+            &self,
+            end_point: &str,
+            body: &str,
+        ) -> Result<T, reqwest::Error> {
             return self
                 .client
                 .post(format!("https://api.igdb.com/v4/{end_point}"))
@@ -59,7 +63,9 @@ pub mod igdb {
                 .body(body.to_owned())
                 .send()
                 .await
-                .expect("Failed to query database.");
+                .expect("Failed to query database.")
+                .json::<T>()
+                .await;
         }
 
         pub fn is_auth_valid(&self) -> bool {
