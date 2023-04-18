@@ -1,8 +1,34 @@
 pub mod igdb {
     use reqwest::Response;
-    use serde::{Deserialize, Serialize, de::DeserializeOwned};
+    use serde::{de::DeserializeOwned, Deserialize, Serialize};
     use std::time::SystemTime;
 
+    #[repr(u32)]
+    #[derive(Copy, Clone)]
+    pub enum GameGenres {
+        Adventure = 31,
+        Arcade = 33,
+        CardAndBoardGame = 35,
+        Fighting = 4,
+        HackNSlash = 25,
+        Indie = 32,
+        MOBA = 36,
+        Music = 7,
+        Pinball = 30,
+        Platform = 8,
+        PointAndClick = 2,
+        Puzzle = 9,
+        RPG = 12,
+        Racing = 10,
+        Shooter = 5,
+        Simulator = 13,
+        Sport = 14,
+        Strategy = 15,
+        TBS = 16,
+        Tactical = 24,
+        Trivia = 26,
+        VisualNovel = 34,
+    }
     pub struct IGDBWrapper {
         auth: Auth,
         auth_refreshed_at: SystemTime,
