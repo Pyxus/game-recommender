@@ -8,22 +8,132 @@ use nalgebra_sparse::{CooMatrix, CscMatrix};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::env;
-use twitch::igdb;
+use std::fmt::Display;
+use twitch::igdb::{GameGenres, IGDBWrapper};
 
 struct Client {
     id: String,
     secret: String,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 struct RatedGame {
+    game: Game,
+    rating: f64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct Game {
     id: u64,
-    rating: f32,
+    genres: Vec<u64>,
+}
+
+impl Display for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "ID: {}", self.id)
+    }
 }
 
 #[tokio::main]
 async fn main() {
     let client = create_client();
+    let mut igdb_wrapper = IGDBWrapper::new(client.id, client.secret);
+    igdb_wrapper.refresh_auth().await;
+
+    let rated_games = vec![
+        RatedGame {
+            game: Game {
+                id: 7334,
+                genres: vec![12, 31],
+            }, // Bloodborne
+            rating: 2.0,
+        },
+        RatedGame {
+            game: Game {
+                id: 119133,
+                genres: vec![12, 31],
+            }, // Elden Ring
+            rating: 1.0,
+        },
+        RatedGame {
+            game: Game {
+                id: 125764,
+                genres: vec![4],
+            }, // Strive
+            rating: 1.5,
+        },
+    ];
+    let games = rated_games
+        .iter()
+        .map(|rg| rg.game.clone())
+        .collect::<Vec<_>>();
+    let rating_mat =
+        DVector::from_iterator(rated_games.len(), rated_games.iter().map(|g| g.rating));
+    let feat_mat = create_feature_mat(&games).await;
+    let weighted_feat_mat = &feat_mat.transpose() * &rating_mat;
+    let user_profile = &weighted_feat_mat / weighted_feat_mat.sum();
+    let candidate_genres = vec![12, 31, 4];
+    let where_genre_str = format!(
+        "{}",
+        candidate_genres
+            .iter()
+            .map(|g| g.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+    let candidate_games = igdb_wrapper
+        .query::<Vec<Game>>(
+            "games",
+            format!(
+                "
+            fields genres;
+            where genres = ({where_genre_str}) & rating > 6;
+            limit 500;
+            "
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to query database.");
+
+    let candidate_mat = create_feature_mat(&candidate_games).await;
+    let recomendation_list = &candidate_mat * &user_profile;
+    let mut rated_rec_list = Vec::<RatedGame>::new();
+    for (i, rating) in recomendation_list.column(0).iter().enumerate() {
+        rated_rec_list.push(RatedGame {
+            game: candidate_games[i].clone(),
+            rating: *rating,
+        })
+    }
+
+    rated_rec_list.sort_by(|a, b| a.rating.partial_cmp(&b.rating).unwrap());
+
+    let where_genre_str = format!(
+        "{}",
+        rated_rec_list
+            .iter()
+            .map(|rg| rg.game.id.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    #[derive(Serialize, Deserialize)]
+    struct NamedGame {
+        id: u64,
+        name: String,
+    }
+
+    let recomendation_list = igdb_wrapper
+        .query::<Vec<NamedGame>>(
+            "games",
+            format!("fields name; where id = ({where_genre_str}) & follows > 2; limit 500;").as_str(),
+        )
+        .await
+        .expect("Failed to query database");
+    
+    for (i, game) in recomendation_list.iter().enumerate() {
+        println!("{} ({})", &game.name, &rated_rec_list[i].rating);
+    }
 }
 
 fn create_client() -> Client {
@@ -34,6 +144,106 @@ fn create_client() -> Client {
     }
 }
 
+async fn create_feature_mat(games: &Vec<Game>) -> CscMatrix<f64> {
+    let genres = vec![
+        GameGenres::PointAndClick,
+        GameGenres::Fighting,
+        GameGenres::Shooter,
+        GameGenres::Music,
+        GameGenres::Platform,
+        GameGenres::Puzzle,
+        GameGenres::Racing,
+        GameGenres::RPG,
+        GameGenres::Simulator,
+        GameGenres::Sport,
+        GameGenres::Strategy,
+        GameGenres::TBS,
+        GameGenres::Tactical,
+        GameGenres::HackNSlash,
+        GameGenres::Trivia,
+        GameGenres::Pinball,
+        GameGenres::Adventure,
+        GameGenres::Indie,
+        GameGenres::Arcade,
+        GameGenres::VisualNovel,
+        GameGenres::CardAndBoardGame,
+        GameGenres::MOBA,
+    ];
+
+    let mut feat_mat = CooMatrix::<f64>::zeros(games.len(), genres.len());
+
+    for (row, game) in games.iter().enumerate() {
+        for (col, genre) in genres.iter().enumerate() {
+            let genre_id = *genre as u64;
+            if game.genres.contains(&genre_id) {
+                feat_mat.push(row, col, 1.0);
+            }
+        }
+    }
+
+    return CscMatrix::from(&feat_mat);
+}
+
+async fn create_candidate_mat(db: &IGDBWrapper, genres: &Vec<u64>) -> CscMatrix<f64> {
+    let where_genre_str = format!(
+        "{}",
+        genres
+            .iter()
+            .map(|g| g.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    let games = db
+        .query::<Vec<Game>>(
+            "games",
+            format!(
+                "
+            fields genres;
+            where genres = ({where_genre_str}) & rating > 6;;
+            sort release_dates.date desc;
+            limit 100;
+            "
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to query database.");
+
+    return create_feature_mat(&games).await;
+}
+
+async fn get_genres_by_game(db: &IGDBWrapper, game_ids: &Vec<u64>) -> HashMap<u64, Vec<u64>> {
+    let where_genre_str = format!(
+        "{}",
+        game_ids
+            .iter()
+            .map(|gid| gid.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    let query_result = db
+        .query::<Vec<Game>>(
+            "games",
+            format!(
+                "
+                fields genres;
+                where id = ({where_genre_str});
+                "
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Query failed.")
+        .iter()
+        .map(|g| (g.id, g.genres.clone()))
+        .collect::<HashMap<_, _>>();
+
+    return query_result;
+}
+
+/*
 async fn there_was_an_attempt() {
     #[derive(Copy, Clone)]
     struct RatedGame {
@@ -205,3 +415,4 @@ async fn there_was_an_attempt() {
 
     // Sum weighted ratings and sort to rank
 }
+*/

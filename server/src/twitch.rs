@@ -3,7 +3,7 @@ pub mod igdb {
     use serde::{de::DeserializeOwned, Deserialize, Serialize};
     use std::time::SystemTime;
 
-    #[repr(u32)]
+    #[repr(u64)]
     #[derive(Copy, Clone)]
     pub enum GameGenres {
         Adventure = 31,
