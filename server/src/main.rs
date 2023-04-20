@@ -1,16 +1,15 @@
-#![allow(dead_code, unused_imports)]
-pub mod twitch;
+mod igdb;
 
-use bimap::{BiHashMap, BiMap};
 use dotenv::dotenv;
-use nalgebra::{Const, DMatrix, DVector, Dyn, Matrix, RowDVector, VecStorage};
+use nalgebra::{Const, DVector, Dyn, Matrix, VecStorage};
 use nalgebra_sparse::{CooMatrix, CscMatrix};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet};
 use std::env;
 use std::fmt::Display;
-use strum::{EnumCount, IntoEnumIterator};
-use twitch::igdb::{Genres, IGDBWrapper, PlayerPerspective, Themes};
+use strum::{IntoEnumIterator, EnumCount};
+use igdb::{Genres, IGDBWrapper, PlayerPerspective, Themes};
+
 struct Client {
     id: String,
     secret: String,
@@ -54,38 +53,25 @@ async fn main() {
     igdb_wrapper.refresh_auth().await;
 
     // Generate input games for testing
-    let rated_games = vec![
-        RatedGame {
-            game: Game {
-                name: String::from("Bloodborne"),
-                id: 7334,
-                genres: vec![12, 31],
-                themes: vec![1, 17, 19, 38],
-                player_perspectives: vec![2],
-            },
-            rating: 2.0,
-        },
-        RatedGame {
-            game: Game {
-                name: String::from("Elden Ring"),
-                id: 119133,
-                genres: vec![12, 31],
-                themes: vec![1, 17, 38],
-                player_perspectives: vec![2],
-            },
+    let games = igdb_wrapper
+        .query::<Vec<Game>>(
+            "games",
+            "
+			fields name, genres, themes, player_perspectives, similar_games;
+			where id = (7498, 76882, 136);
+			limit 100;
+			",
+        )
+        .await
+        .expect("");
+
+    let rated_games = games
+        .iter()
+        .map(|game| RatedGame {
+            game: game.clone(),
             rating: 1.0,
-        },
-        RatedGame {
-            game: Game {
-                name: String::from("Guilty Gear Strive"),
-                id: 125764,
-                genres: vec![4],
-                themes: vec![1],
-                player_perspectives: vec![4],
-            },
-            rating: 1.5,
-        },
-    ];
+        })
+        .collect::<Vec<_>>();
 
     // Generate candidate games using input game features
     let games = rated_games
@@ -169,18 +155,18 @@ async fn create_candidate_list(
     );
 
     let q = db
-        .query::<Vec<GameQuery>>(
-            "games", 
-            format!(
-            "
-            fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
-            where id = ({where_game_id_str});
-            limit 100; 
-            "
-            ).as_str()
-        )
-        .await
-        .expect("Failed to query database.");
+		.query::<Vec<GameQuery>>(
+			"games", 
+			format!(
+			"
+			fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
+			where id = ({where_game_id_str});
+			limit 100; 
+			"
+			).as_str()
+		)
+		.await
+		.expect("Failed to query database.");
 
     let where_exlude_game_id = q
         .iter()
@@ -229,21 +215,21 @@ async fn create_candidate_list(
             "games",
             format!(
                 "
-            fields name, genres, themes, player_perspectives;
-            where genres = 
-                ({where_genre_str}) 
-                & themes = ({where_theme_str}) 
-                & player_perspectives = ({where_perspective_str})
-                & id != ({where_exlude_game_id})
-                & rating > 6;
-            limit 500;
-            "
+			fields name, genres, themes, player_perspectives;
+			where genres = 
+				({where_genre_str}) 
+				& themes = ({where_theme_str}) 
+				& player_perspectives = ({where_perspective_str})
+				& id != ({where_exlude_game_id})
+				& rating > 6;
+			limit 500;
+			"
             )
             .as_str(),
         )
         .await
         .expect("Failed to query database.");
-    
+
     candidate_games.extend(similar_games);
 
     return candidate_games;
