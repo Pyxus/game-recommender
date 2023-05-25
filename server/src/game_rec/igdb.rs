@@ -84,6 +84,8 @@ struct Auth {
     token_type: String,
 }
 
+
+
 impl IGDBWrapper {
     pub fn new(client_id: String, client_secret: String) -> Self {
         IGDBWrapper {

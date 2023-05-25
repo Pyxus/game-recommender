@@ -26,7 +26,6 @@ impl Recommender {
     }
 
     pub async fn get_recommended_games(&self, rated_games: &Vec<RatedGame>) -> Vec<RatedGame>{
-        // Generate candidate games using input game features
         let games = rated_games
             .iter()
             .map(|rg| rg.game.clone())
