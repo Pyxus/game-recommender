@@ -5,22 +5,25 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use strum::{EnumCount, IntoEnumIterator};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RatedGame {
     pub game: Game,
     pub rating: f64,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct Game {
-    pub name: String,
     pub id: u64,
+    #[serde(default)]
+    pub name: String,
     #[serde(default)]
     pub genres: Vec<u64>,
     #[serde(default)]
     pub themes: Vec<u64>,
     #[serde(default)]
     pub player_perspectives: Vec<u64>,
+    #[serde(default)]
+    pub first_release_date: i64,
 }
 
 struct FeatureSet {
@@ -182,5 +185,3 @@ fn create_feature_set(games: &Vec<Game>) -> FeatureSet {
         perspectives,
     };
 }
-
-
