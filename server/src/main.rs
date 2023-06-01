@@ -4,15 +4,12 @@ extern crate rocket;
 
 mod game_rec;
 
-use std::time::Duration;
-
 use futures::lock::Mutex;
 use game_rec::cb_filtering::{Game, RatedGame};
 use game_rec::Recommender;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::State;
-use tokio::time::sleep;
 
 #[derive(FromForm, Serialize, Deserialize)]
 struct InputGame {
