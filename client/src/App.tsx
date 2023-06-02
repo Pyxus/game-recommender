@@ -88,7 +88,6 @@ function App() {
     searchResultIndex: number,
     searchedGameIndex: number
   ) => {
-    console.log("RES:", searchResults)
     const selectedGame = searchResults[searchResultIndex];
     
     setSearchedGames(
@@ -109,16 +108,17 @@ function App() {
   const onSearchBlur = (index: number) => {
     if (searchedGames[index].rated_game.game === null) {
       searchedGames[index].search_name = "";
+      setSearchResults([]);
     }
-    setSearchResults([]);
   };
 
   const onSubmitClicked = async () => {
     const inputGames = searchedGames
       .map((searchedGame) => searchedGame.rated_game)
       .filter((rated_game) => rated_game.game !== null) as RatedGame[];
-    console.log(inputGames[0].game)
-    return
+
+    console.log(inputGames)
+
     if (inputGames.length > 0) {
       try {
         const response = await axios.post(
@@ -137,7 +137,7 @@ function App() {
       <h1>Game Recommender</h1>
       <h2>Select three game titles you've enjoyed to get started!</h2>
       {searchedGames.map((searchedGame: SearchedGame, index: number) => (
-        <>
+        <div key={index}>
           <button onClick={() => onDeleteGameButtonClicked(index)}>X</button>
           <input
             type="number"
@@ -162,15 +162,15 @@ function App() {
             <ul>
               {searchResults.map((result, searchIndex) => (
                 <li
-                  key={index}
+                  key={searchIndex}
                   onClick={() => onGameSelected(searchIndex, index)}
                 >
-                  {result.name}
+                  {`${result.name} (${new Date(result.first_release_date * 1000).getFullYear()})`}
                 </li>
               ))}
             </ul>
           )}
-        </>
+        </div>
       ))}
       <br />
       <button onClick={onAddedGameButtonClicked}>Add Game</button>

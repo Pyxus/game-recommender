@@ -39,12 +39,14 @@ async fn index(client: &State<Mutex<Recommender>>) -> &'static str {
     "Hello, world!"
 }
 
-#[post("/recommend", format = "json", data = "<games>")]
+#[post("/recommend", format = "json", data = "<games_json>")]
 async fn recommend_game(
-    games: Json<Vec<RatedGame>>,
+    games_json: Json<Vec<RatedGame>>,
     client: &State<Mutex<Recommender>>,
 ) -> Json<Vec<RatedGame>> {
     let client = client.lock().await;
+    let games = games_json.into_inner();
+
     Json(client.get_recommended_games(&games).await)
 }
 

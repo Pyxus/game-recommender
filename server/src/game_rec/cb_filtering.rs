@@ -5,13 +5,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use strum::{EnumCount, IntoEnumIterator};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RatedGame {
     pub game: Game,
     pub rating: f64,
 }
 
-#[derive(Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default, Debug)]
 pub struct Game {
     pub id: u64,
     #[serde(default)]
@@ -67,12 +67,31 @@ async fn find_similar_games(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
 }
 
 pub async fn create_candidate_list(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
+
+    let where_ids = comma_sep(games, |g| g.id.to_string());
+
+    let games = db
+        .query::<Vec<Game>>(
+            "games",
+            format!(
+                "
+			fields name, genres, themes, player_perspectives;
+			where id = ({where_ids});
+			limit 500;
+			"
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to query database.");
+
     let similar_games = find_similar_games(&db, &games).await;
     let feature_set = create_feature_set(&games);
     let where_exlude_game_id = comma_sep(&similar_games, |game| game.id.to_string());
     let where_genre_str = comma_sep(&feature_set.genres, |g| g.to_string());
     let where_theme_str = comma_sep(&feature_set.themes, |g| g.to_string());
     let where_perspective_str = comma_sep(&feature_set.perspectives, |g| g.to_string());
+    
 
     let mut candidate_games = db
         .query::<Vec<Game>>(
@@ -151,12 +170,12 @@ pub async fn calc_profile_mat(
     return user_profile;
 }
 
-fn comma_sep<T, F, C>(coll: C, f: F) -> String
+fn comma_sep<T, F, C>(collection: C, f: F) -> String
 where
     F: FnMut(&T) -> String,
     C: IntoIterator<Item = T>,
 {
-    let coll_vec: Vec<T> = coll.into_iter().collect();
+    let coll_vec: Vec<T> = collection.into_iter().collect();
     coll_vec.iter().map(f).collect::<Vec<String>>().join(", ")
 }
 

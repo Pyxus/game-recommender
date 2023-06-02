@@ -65,7 +65,7 @@ impl Recommender {
                     rating: *rating,
                 }),
         );
-        
+        println!("{:?}", recommended_games);
         recommended_games.sort_by(|a, b| b.rating.partial_cmp(&a.rating).unwrap());
 
         recommended_games
