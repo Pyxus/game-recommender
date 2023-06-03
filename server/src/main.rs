@@ -4,6 +4,8 @@ extern crate rocket;
 
 mod game_rec;
 
+use std::collections::HashMap;
+
 use futures::lock::Mutex;
 use game_rec::cb_filtering::{Game, RatedGame};
 use game_rec::Recommender;
@@ -41,7 +43,7 @@ async fn index(client: &State<Mutex<Recommender>>) -> &'static str {
 
 #[post("/recommend", format = "json", data = "<games_json>")]
 async fn recommend_game(
-    games_json: Json<Vec<RatedGame>>,
+    games_json: Json<HashMap<u64, f64>>,
     client: &State<Mutex<Recommender>>,
 ) -> Json<Vec<RatedGame>> {
     let client = client.lock().await;
@@ -77,16 +79,6 @@ async fn _test() {
     let mut rec = Recommender::new();
     rec.init().await;
 
-    let rated_games = vec![RatedGame {
-        rating: 1.0,
-        game: Game {
-            name: String::from("Bloodborne"),
-            id: 7334,
-            genres: vec![2],
-            themes: vec![1],
-            player_perspectives: vec![1],
-            ..Default::default()
-        },
-    }];
-    let _ = rec.get_recommended_games(&rated_games).await;
+    let rating_by_ids = HashMap::from([(7334, 1.0)]);
+    let _ = rec.get_recommended_games(&rating_by_ids).await;
 }

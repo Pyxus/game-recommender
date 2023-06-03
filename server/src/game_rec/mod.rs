@@ -5,7 +5,10 @@ use cb_filtering::Game;
 use cb_filtering::RatedGame;
 use dotenv::dotenv;
 use igdb::IGDBWrapper;
+use std::collections::HashMap;
 use std::env;
+
+use crate::game_rec::cb_filtering::find_games_from_ids;
 
 struct Client {
     id: String,
@@ -33,7 +36,7 @@ impl Recommender {
             .query::<Vec<Game>>(
                 "games",
                 format!(
-                r#"
+                    r#"
                     fields name, first_release_date;
                     search "{name}";
                     where version_parent = null & category = 0 & first_release_date != null;
@@ -45,12 +48,17 @@ impl Recommender {
             .expect("Failed to query database.")
     }
 
-    pub async fn get_recommended_games(&self, rated_games: &Vec<RatedGame>) -> Vec<RatedGame> {
-        let games = rated_games
+    pub async fn get_recommended_games(&self, rating_by_id: &HashMap<u64, f64>) -> Vec<RatedGame> {
+        let game_ids = rating_by_id.keys().cloned().collect::<Vec<u64>>();
+        let input_games = find_games_from_ids(&self.db, &game_ids).await;
+        let rated_games = input_games
             .iter()
-            .map(|rg| rg.game.clone())
-            .collect::<Vec<_>>();
-        let candidate_games = cb_filtering::create_candidate_list(&self.db, &games).await;
+            .map(|game| RatedGame {
+                game: game.clone(),
+                rating: *rating_by_id.get(&game.id).expect("Failed to get game id"),
+            })
+            .collect();
+        let candidate_games = cb_filtering::create_candidate_list(&self.db, &game_ids).await;
         let candidate_mat = cb_filtering::create_feature_mat(&candidate_games).await;
 
         let user_profile = cb_filtering::calc_profile_mat(&rated_games).await;
@@ -65,9 +73,7 @@ impl Recommender {
                     rating: *rating,
                 }),
         );
-        println!("{:?}", recommended_games);
         recommended_games.sort_by(|a, b| b.rating.partial_cmp(&a.rating).unwrap());
-
         recommended_games
     }
 }

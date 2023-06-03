@@ -66,16 +66,15 @@ async fn find_similar_games(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
     return games;
 }
 
-pub async fn create_candidate_list(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
-
-    let where_ids = comma_sep(games, |g| g.id.to_string());
+pub async fn find_games_from_ids(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game>{
+    let where_ids = comma_sep(game_ids, |id| (**id).to_string());
 
     let games = db
         .query::<Vec<Game>>(
             "games",
             format!(
                 "
-			fields name, genres, themes, player_perspectives;
+			fields name, genres, themes, player_perspectives, first_release_date;
 			where id = ({where_ids});
 			limit 500;
 			"
@@ -84,14 +83,18 @@ pub async fn create_candidate_list(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<G
         )
         .await
         .expect("Failed to query database.");
+    
+    games
+}
 
+pub async fn create_candidate_list(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
+    let games = find_games_from_ids(&db, &game_ids).await;
     let similar_games = find_similar_games(&db, &games).await;
     let feature_set = create_feature_set(&games);
     let where_exlude_game_id = comma_sep(&similar_games, |game| game.id.to_string());
     let where_genre_str = comma_sep(&feature_set.genres, |g| g.to_string());
     let where_theme_str = comma_sep(&feature_set.themes, |g| g.to_string());
     let where_perspective_str = comma_sep(&feature_set.perspectives, |g| g.to_string());
-    
 
     let mut candidate_games = db
         .query::<Vec<Game>>(
