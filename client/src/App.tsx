@@ -115,9 +115,7 @@ function App() {
   const onSubmitClicked = async () => {
     const inputGames = searchedGames.filter((searchedGame) => searchedGame.rated_game.game !== null)
     const rating_by_ids: { [key: number]: number } = {};
-    console.log(inputGames)
     inputGames.forEach((searchedGame) => {
-      console.log(searchedGame.search_name, ":", searchedGame.rated_game.game?.id)
       if (searchedGame.rated_game.game !== null){
         const game = searchedGame.rated_game.game as Game
         rating_by_ids[game.id] = searchedGame.rated_game.rating;
