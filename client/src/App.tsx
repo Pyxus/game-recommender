@@ -113,19 +113,25 @@ function App() {
   };
 
   const onSubmitClicked = async () => {
-    const inputGames = searchedGames
-      .map((searchedGame) => searchedGame.rated_game)
-      .filter((rated_game) => rated_game.game !== null) as RatedGame[];
-
+    const inputGames = searchedGames.filter((searchedGame) => searchedGame.rated_game.game !== null)
+    const rating_by_ids: { [key: number]: number } = {};
     console.log(inputGames)
+    inputGames.forEach((searchedGame) => {
+      console.log(searchedGame.search_name, ":", searchedGame.rated_game.game?.id)
+      if (searchedGame.rated_game.game !== null){
+        const game = searchedGame.rated_game.game as Game
+        rating_by_ids[game.id] = searchedGame.rated_game.rating;
+      }
+    })
 
     if (inputGames.length > 0) {
       try {
-        const response = await axios.post(
+        const response: AxiosResponse<RatedGame[]> = await axios.post(
           `http://127.0.0.1:8000/recommend`,
-          inputGames
+          rating_by_ids,
+          { headers: { "Content-Type": "application/json" } }
         );
-        console.log(response.data);
+        setRecommendations(response.data)
       } catch (error) {
         console.error("Error:", error);
       }
@@ -185,6 +191,12 @@ function App() {
           Submit
         </button>
       )}
+      <ol>
+      {recommendations.map((ratedGame, index) => (
+        <li key={index}>{ratedGame.game?.name}</li>
+      ))
+      }
+      </ol>
     </>
   );
 }
