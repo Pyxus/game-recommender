@@ -1,2 +1,4 @@
 # game-recommender
-Work in progress practice project. The goal of this project is to create a simple tool which recommends games based on games liked by the user.
+Game recommendation tool. The user provides games they enjoy as an input and the server generates a list of recommended games using a content based filtering algorithm.
+
+TODO: Update readme with images and more project details.
