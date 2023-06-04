@@ -74,11 +74,3 @@ async fn rocket() -> _ {
         .mount("/", routes![index, all_options, search_game, recommend_game])
         .attach(CORS)
 }
-
-async fn _test() {
-    let mut rec = Recommender::new();
-    rec.init().await;
-
-    let rating_by_ids = HashMap::from([(7334, 1.0)]);
-    let _ = rec.get_recommended_games(&rating_by_ids).await;
-}
