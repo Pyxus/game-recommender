@@ -7,7 +7,8 @@ mod game_rec;
 use std::collections::HashMap;
 
 use futures::lock::Mutex;
-use game_rec::cb_filtering::{Game, RatedGame};
+use game_rec::igdb::Game;
+use game_rec::cb_filtering::{RatedGame};
 use game_rec::Recommender;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::{Header};

@@ -1,4 +1,4 @@
-use super::igdb::{Genres, IGDBWrapper, PlayerPerspective, Themes};
+use super::igdb::{Genres, Game, IGDBWrapper, PlayerPerspective, Themes};
 use nalgebra::{Const, DVector, Dyn, Matrix, VecStorage};
 use nalgebra_sparse::{CooMatrix, CscMatrix};
 use serde::{Deserialize, Serialize};
@@ -11,80 +11,15 @@ pub struct RatedGame {
     pub rating: f64,
 }
 
-#[derive(Clone, Serialize, Deserialize, Default, Debug)]
-pub struct Game {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub genres: Vec<u64>,
-    #[serde(default)]
-    pub themes: Vec<u64>,
-    #[serde(default)]
-    pub player_perspectives: Vec<u64>,
-    #[serde(default)]
-    pub first_release_date: i64,
-}
-
 struct FeatureSet {
     genres: HashSet<u64>,
     themes: HashSet<u64>,
     perspectives: HashSet<u64>,
 }
 
-async fn find_similar_games(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
-    #[derive(Serialize, Deserialize)]
-    struct GameQuery {
-        id: u64,
-        similar_games: Vec<Game>,
-    }
-
-    let where_game_id_str = comma_sep(games, |g| g.id.to_string());
-    let query =format!(
-        "
-        fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
-        where id = ({where_game_id_str});
-        limit 100; 
-        "
-        );
-    let query_result = db.query::<Vec<GameQuery>>("games", query.as_str()).await;
-
-    match query_result {
-        Ok(game_queries) => {
-            let mut games: Vec<Game> = Vec::new();
-            for query in game_queries {
-                for game in query.similar_games {
-                    if games.iter().find(|g| g.id == game.id).is_none() {
-                        games.push(game);
-                    }
-                }
-            }
-            games
-        }
-        Err(_) => vec![],
-    }
-}
-
-pub async fn find_games_from_ids(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
-    let where_ids = comma_sep(game_ids, |id| (**id).to_string());
-    let query = format!(
-        "
-        fields name, genres, themes, player_perspectives, first_release_date;
-        where id = ({where_ids});
-        limit 500;
-        "
-    );
-    let query_result = db.query::<Vec<Game>>("games", query.as_str()).await;
-
-    match query_result {
-        Ok(games) => games,
-        Err(_) => vec![],
-    }
-}
-
 pub async fn create_candidate_list(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
-    let games = find_games_from_ids(&db, &game_ids).await;
-    let similar_games = find_similar_games(&db, &games).await;
+    let games = db.find_games_from_ids(&game_ids).await;
+    let similar_games = db.find_similar_games(&game_ids).await;
     let feature_set = create_feature_set(&games);
     let where_exlude_game_id = comma_sep(&similar_games, |game| game.id.to_string());
     let where_genre_str = comma_sep(&feature_set.genres, |g| g.to_string());

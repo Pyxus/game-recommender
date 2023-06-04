@@ -69,6 +69,23 @@ pub enum PlayerPerspective {
     VR = 7,
 }
 
+#[derive(Clone, Serialize, Deserialize, Default, Debug)]
+pub struct Game {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub genres: Vec<u64>,
+    #[serde(default)]
+    pub themes: Vec<u64>,
+    #[serde(default)]
+    pub player_perspectives: Vec<u64>,
+    #[serde(default)]
+    pub first_release_date: i64,
+    #[serde(default)]
+    pub similar_games: Vec<Game>,
+}
+
 pub struct IGDBWrapper {
     auth: Auth,
     auth_refreshed_at: SystemTime,
@@ -98,20 +115,19 @@ impl IGDBWrapper {
     pub async fn refresh_auth(&mut self) {
         let client_id = &self.client_id;
         let client_secret = &self.client_secret;
-        let post = format!("https://id.twitch.tv/oauth2/token?client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials");
+        let params = format!("client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials");
+        let post = format!("https://id.twitch.tv/oauth2/token?{params}");
         let post_result = self.client.post(post).send().await;
 
         match post_result {
-            Ok(response) => {
-                match response.json::<Auth>().await {
-                    Ok(auth) => {
-                        self.auth = auth;
-                        self.auth_refreshed_at = SystemTime::now();
-                    },
-                    Err(_) => eprintln!("Error refreshing auth. Failed to parse JSON response.")
+            Ok(response) => match response.json::<Auth>().await {
+                Ok(auth) => {
+                    self.auth = auth;
+                    self.auth_refreshed_at = SystemTime::now();
                 }
+                Err(_) => eprintln!("Error refreshing auth. Failed to parse JSON response."),
             },
-            Err(_) => eprintln!("Error refreshing auth. Failed to receive post response.")
+            Err(_) => eprintln!("Error refreshing auth. Failed to receive post response."),
         }
     }
 
@@ -135,12 +151,55 @@ impl IGDBWrapper {
         match response_result {
             Ok(response) => response.json::<T>().await.and_then(|data| Ok(data)),
             Err(error) => {
-                if ! self.is_auth_valid(){
-                    eprint!("Failed to query database. Auth is no longer valid.");
+                eprint!("Failed to query database: {:?}", error);
+                if !self.is_auth_valid() {
+                    eprint!("Auth is no longer valid!");
                 }
-
                 Err(error)
-            },
+            }
+        }
+    }
+
+    pub async fn find_similar_games(&self, game_ids: &Vec<u64>) -> Vec<Game> {
+        let where_game_id_str = self.comma_sep(game_ids, |gid| (**gid).to_string());
+        let query =format!(
+            "
+            fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
+            where id = ({where_game_id_str});
+            limit 100; 
+            "
+            );
+        let query_result = self.query::<Vec<Game>>("games", query.as_str()).await;
+        match query_result {
+            Ok(game_queries) => {
+                let mut games: Vec<Game> = Vec::new();
+                for query in game_queries {
+                    for game in query.similar_games {
+                        if games.iter().find(|g| g.id == game.id).is_none() {
+                            games.push(game);
+                        }
+                    }
+                }
+                games
+            }
+            Err(_) => vec![],
+        }
+    }
+
+    pub async fn find_games_from_ids(&self, game_ids: &Vec<u64>) -> Vec<Game> {
+        let where_ids = self.comma_sep(game_ids, |id| (**id).to_string());
+        let query = format!(
+            "
+            fields name, genres, themes, player_perspectives, first_release_date;
+            where id = ({where_ids});
+            limit 500;
+            "
+        );
+        let query_result = self.query::<Vec<Game>>("games", query.as_str()).await;
+
+        match query_result {
+            Ok(games) => games,
+            Err(_) => vec![],
         }
     }
 
@@ -149,5 +208,14 @@ impl IGDBWrapper {
             Ok(duration) => duration.as_secs() < self.auth.expires_in,
             Err(_) => false,
         }
+    }
+
+    fn comma_sep<T, F, C>(&self, collection: C, f: F) -> String
+    where
+        F: FnMut(&T) -> String,
+        C: IntoIterator<Item = T>,
+    {
+        let coll_vec: Vec<T> = collection.into_iter().collect();
+        coll_vec.iter().map(f).collect::<Vec<String>>().join(", ")
     }
 }

@@ -1,14 +1,11 @@
 pub mod cb_filtering;
 pub mod igdb;
 
-use cb_filtering::Game;
 use cb_filtering::RatedGame;
 use dotenv::dotenv;
-use igdb::IGDBWrapper;
+use igdb::{IGDBWrapper, Game};
 use std::collections::HashMap;
 use std::env;
-
-use crate::game_rec::cb_filtering::find_games_from_ids;
 
 struct Client {
     id: String,
@@ -47,7 +44,7 @@ impl Recommender {
 
     pub async fn get_recommended_games(&self, rating_by_id: &HashMap<u64, f64>) -> Vec<RatedGame> {
         let game_ids = rating_by_id.keys().cloned().collect::<Vec<u64>>();
-        let input_games = find_games_from_ids(&self.db, &game_ids).await;
+        let input_games = self.db.find_games_from_ids(&game_ids).await; 
         let rated_games = input_games
             .iter()
             .map(|game| RatedGame {
