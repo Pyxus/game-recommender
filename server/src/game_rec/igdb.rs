@@ -1,6 +1,7 @@
+use rocket::serde::json::Json;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::SystemTime;
-use strum_macros::{EnumIter, EnumCount};
+use strum_macros::{EnumCount, EnumIter};
 
 #[repr(u64)]
 #[derive(Debug, Copy, Clone, EnumIter, EnumCount)]
@@ -84,8 +85,6 @@ struct Auth {
     token_type: String,
 }
 
-
-
 impl IGDBWrapper {
     pub fn new(client_id: String, client_secret: String) -> Self {
         IGDBWrapper {
@@ -101,18 +100,20 @@ impl IGDBWrapper {
         let client_id = &self.client_id;
         let client_secret = &self.client_secret;
         let post = format!("https://id.twitch.tv/oauth2/token?client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials");
+        let post_result = self.client.post(post).send().await;
 
-        self.auth = self
-            .client
-            .post(post)
-            .send()
-            .await
-            .expect("Post request failed.")
-            .json::<Auth>()
-            .await
-            .expect("Failed to retreive Auth from JSON.");
-
-        self.auth_refreshed_at = SystemTime::now();
+        match post_result {
+            Ok(response) => {
+                match response.json::<Auth>().await {
+                    Ok(auth) => {
+                        self.auth = auth;
+                        self.auth_refreshed_at = SystemTime::now();
+                    },
+                    Err(_) => eprintln!("Error refreshing auth. Failed to parse JSON response.")
+                }
+            },
+            Err(_) => eprintln!("Error refreshing auth. Failed to receive post response.")
+        }
     }
 
     pub async fn query<T: DeserializeOwned>(
@@ -120,7 +121,7 @@ impl IGDBWrapper {
         end_point: &str,
         body: &str,
     ) -> Result<T, reqwest::Error> {
-        return self
+        let response_result = self
             .client
             .post(format!("https://api.igdb.com/v4/{end_point}"))
             .header(
@@ -130,20 +131,24 @@ impl IGDBWrapper {
             .header("Client-ID", &self.client_id)
             .body(body.to_owned())
             .send()
-            .await
-            .expect("Failed to query database.")
-            .json::<T>()
             .await;
+
+        match response_result {
+            Ok(response) => response.json::<T>().await.and_then(|data| Ok(data)),
+            Err(error) => {
+                if ! self.is_auth_valid(){
+                    eprint!("Failed to query database. Auth is no longer valid.");
+                }
+
+                Err(error)
+            },
+        }
     }
 
-    #[allow(dead_code)]
     pub fn is_auth_valid(&self) -> bool {
-        self.auth.expires_in > 0
-            && SystemTime::now()
-                .elapsed()
-                .expect("Failed to get elapsed time")
-                .as_secs()
-                < self.auth.expires_in
+        match self.auth_refreshed_at.elapsed() {
+            Ok(duration) => duration.as_secs() < self.auth.expires_in,
+            Err(_) => false,
+        }
     }
 }
-

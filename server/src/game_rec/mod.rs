@@ -31,21 +31,18 @@ impl Recommender {
         self.db.refresh_auth().await;
     }
 
-    pub async fn search_game(&self, name: &String) -> Vec<Game> {
-        self.db
-            .query::<Vec<Game>>(
-                "games",
-                format!(
-                    r#"
-                    fields name, first_release_date;
-                    search "{name}";
-                    where version_parent = null & category = 0 & first_release_date != null;
-                "#
-                )
-                .as_str(),
-            )
-            .await
-            .expect("Failed to query database.")
+    pub async fn search_game(&self, name: &String) -> Result<Vec<Game>, reqwest::Error> {
+        let query = format!(
+            r#"
+            fields name, first_release_date;
+            search "{name}";
+            where version_parent = null & category = 0 & first_release_date != null;
+        "#
+        );
+        let result = self.db
+            .query::<Vec<Game>>("games",query.as_str())
+            .await?;
+        Ok(result)
     }
 
     pub async fn get_recommended_games(&self, rating_by_id: &HashMap<u64, f64>) -> Vec<RatedGame> {
@@ -81,7 +78,7 @@ impl Recommender {
 fn create_client() -> Client {
     dotenv().ok();
     Client {
-        id: env::var("TWITCH_CLIENT_ID").expect("Failed to get twitch client id."),
-        secret: env::var("TWITCH_CLIENT_SECRET").expect("Failed to get twitch client secret."),
+        id: env::var("TWITCH_CLIENT_ID").expect("Failed to get twitch client id from env."),
+        secret: env::var("TWITCH_CLIENT_SECRET").expect("Failed to get twitch client secret from env."),
     }
 }

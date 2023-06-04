@@ -38,53 +38,48 @@ async fn find_similar_games(db: &IGDBWrapper, games: &Vec<Game>) -> Vec<Game> {
         id: u64,
         similar_games: Vec<Game>,
     }
+
     let where_game_id_str = comma_sep(games, |g| g.id.to_string());
+    let query =format!(
+        "
+        fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
+        where id = ({where_game_id_str});
+        limit 100; 
+        "
+        );
+    let query_result = db.query::<Vec<GameQuery>>("games", query.as_str()).await;
 
-    let q = db
-		.query::<Vec<GameQuery>>(
-			"games", 
-			format!(
-			"
-			fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
-			where id = ({where_game_id_str});
-			limit 100; 
-			"
-			).as_str()
-		)
-		.await
-		.expect("Failed to query database.");
-
-    let mut games: Vec<Game> = Vec::new();
-    for query in q {
-        for game in query.similar_games {
-            if games.iter().find(|g| g.id == game.id).is_none() {
-                games.push(game);
+    match query_result {
+        Ok(game_queries) => {
+            let mut games: Vec<Game> = Vec::new();
+            for query in game_queries {
+                for game in query.similar_games {
+                    if games.iter().find(|g| g.id == game.id).is_none() {
+                        games.push(game);
+                    }
+                }
             }
+            games
         }
+        Err(_) => vec![],
     }
-
-    return games;
 }
 
-pub async fn find_games_from_ids(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game>{
+pub async fn find_games_from_ids(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
     let where_ids = comma_sep(game_ids, |id| (**id).to_string());
+    let query = format!(
+        "
+        fields name, genres, themes, player_perspectives, first_release_date;
+        where id = ({where_ids});
+        limit 500;
+        "
+    );
+    let query_result = db.query::<Vec<Game>>("games", query.as_str()).await;
 
-    let games = db
-        .query::<Vec<Game>>(
-            "games",
-            format!(
-                "
-			fields name, genres, themes, player_perspectives, first_release_date;
-			where id = ({where_ids});
-			limit 500;
-			"
-            )
-            .as_str(),
-        )
-        .await
-        .expect("Failed to query database.");
-    
-    games
+    match query_result {
+        Ok(games) => games,
+        Err(_) => vec![],
+    }
 }
 
 pub async fn create_candidate_list(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
@@ -95,30 +90,29 @@ pub async fn create_candidate_list(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec
     let where_genre_str = comma_sep(&feature_set.genres, |g| g.to_string());
     let where_theme_str = comma_sep(&feature_set.themes, |g| g.to_string());
     let where_perspective_str = comma_sep(&feature_set.perspectives, |g| g.to_string());
+    let query = format!(
+        "
+        fields name, genres, themes, player_perspectives;
+        where genres = 
+            ({where_genre_str}) 
+            & themes = ({where_theme_str}) 
+            & player_perspectives = ({where_perspective_str})
+            & id != ({where_exlude_game_id})
+            & rating > 6;
+        limit 500;
+        "
+    );
+    let query_result = db
+        .query::<Vec<Game>>("games", query.as_str())
+        .await;
 
-    let mut candidate_games = db
-        .query::<Vec<Game>>(
-            "games",
-            format!(
-                "
-			fields name, genres, themes, player_perspectives;
-			where genres = 
-				({where_genre_str}) 
-				& themes = ({where_theme_str}) 
-				& player_perspectives = ({where_perspective_str})
-				& id != ({where_exlude_game_id})
-				& rating > 6;
-			limit 500;
-			"
-            )
-            .as_str(),
-        )
-        .await
-        .expect("Failed to query database.");
-
-    candidate_games.extend(similar_games);
-
-    return candidate_games;
+    match query_result {
+        Ok(mut candidate_games) => {
+            candidate_games.extend(similar_games);
+            candidate_games
+        },
+        Err(_) => vec![],
+    }
 }
 
 pub async fn create_feature_mat(games: &Vec<Game>) -> CscMatrix<f64> {
