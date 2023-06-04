@@ -18,6 +18,8 @@ interface SearchedGame {
   search_name: string;
 }
 
+const serverUrl: string = "http://localhost:8000"
+
 function App() {
   const [searchedGames, setSearchedGames] = useState<SearchedGame[]>([]);
   const [focusedSearch, setFocusedSearch] = useState<number>(-1);
@@ -29,7 +31,7 @@ function App() {
 
     try {
       const response: AxiosResponse<Game[]> = await axios.get(
-        `http://127.0.0.1:8000/search_game?name=${searchText}`
+        `${serverUrl}/search_games?name=${searchText}`
       );
 
       setSearchResults(response.data);
@@ -125,7 +127,7 @@ function App() {
     if (inputGames.length > 0) {
       try {
         const response: AxiosResponse<RatedGame[]> = await axios.post(
-          `http://127.0.0.1:8000/recommend`,
+          `${serverUrl}/recommend_games`,
           rating_by_ids,
           { headers: { "Content-Type": "application/json" } }
         );

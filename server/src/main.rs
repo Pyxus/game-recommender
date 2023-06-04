@@ -7,11 +7,11 @@ mod game_rec;
 use std::collections::HashMap;
 
 use futures::lock::Mutex;
+use game_rec::cb_filtering::RatedGame;
 use game_rec::igdb::Game;
-use game_rec::cb_filtering::{RatedGame};
 use game_rec::Recommender;
 use rocket::fairing::{Fairing, Info, Kind};
-use rocket::http::{Header};
+use rocket::http::Header;
 use rocket::serde::json::Json;
 use rocket::State;
 use rocket::{get, routes};
@@ -29,10 +29,7 @@ impl Fairing for CORS {
     }
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        response.set_header(Header::new(
-            "Access-Control-Allow-Origin",
-            "http://localhost:5173",
-        ));
+        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
             "POST, GET, PATCH, OPTIONS",
@@ -78,7 +75,7 @@ async fn rocket() -> _ {
     rec.init().await;
 
     rocket::build()
+        .attach(CORS)
         .manage(Mutex::new(rec))
         .mount("/", routes![all_options, search_games, recommend_games])
-        .attach(CORS)
 }
