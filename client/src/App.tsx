@@ -143,7 +143,7 @@ function App() {
   return (
     <>
       <h1>Game Recommender</h1>
-      <h2>Select three game titles you've enjoyed to get started!</h2>
+      <h2>Select game titles you've enjoyed to get started!</h2>
       {searchedGames.map((searchedGame: SearchedGame, index: number) => (
         <div key={index}>
           <button onClick={() => onDeleteGameButtonClicked(index)}>X</button>
