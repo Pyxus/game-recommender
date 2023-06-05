@@ -73,6 +73,7 @@ async fn search_games(name: String, _rec_mutex: &State<Mutex<Recommender>>) -> J
 
 #[launch]
 async fn rocket() -> _ {
+	
     let twitch_client = TwitchClient::from_dotenv(
         String::from("TWITCH_CLIENT_ID"),
         String::from("TWITCH_CLIENT_SECRET"),

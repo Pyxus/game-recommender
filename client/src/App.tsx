@@ -18,7 +18,7 @@ interface SearchedGame {
   search_name: string;
 }
 
-const serverUrl: string = "http://localhost:8000"
+const serverUrl = "http://localhost:8000";
 
 function App() {
   const [searchedGames, setSearchedGames] = useState<SearchedGame[]>([]);
@@ -66,7 +66,7 @@ function App() {
   };
 
   const onDeleteGameButtonClicked = (index: number) => {
-    setSearchedGames(searchedGames.filter((item, gIndex) => gIndex !== index));
+    setSearchedGames(searchedGames.filter((_item, gIndex) => gIndex !== index));
   };
 
   const onGameRatingChange = (
@@ -91,7 +91,7 @@ function App() {
     searchedGameIndex: number
   ) => {
     const selectedGame = searchResults[searchResultIndex];
-    
+
     setSearchedGames(
       searchedGames.map((sg, index) => {
         if (index === searchedGameIndex) {
@@ -115,14 +115,16 @@ function App() {
   };
 
   const onSubmitClicked = async () => {
-    const inputGames = searchedGames.filter((searchedGame) => searchedGame.rated_game.game !== null)
+    const inputGames = searchedGames.filter(
+      (searchedGame) => searchedGame.rated_game.game !== null
+    );
     const rating_by_ids: { [key: number]: number } = {};
     inputGames.forEach((searchedGame) => {
-      if (searchedGame.rated_game.game !== null){
-        const game = searchedGame.rated_game.game as Game
+      if (searchedGame.rated_game.game !== null) {
+        const game = searchedGame.rated_game.game as Game;
         rating_by_ids[game.id] = searchedGame.rated_game.rating;
       }
-    })
+    });
 
     if (inputGames.length > 0) {
       try {
@@ -131,7 +133,7 @@ function App() {
           rating_by_ids,
           { headers: { "Content-Type": "application/json" } }
         );
-        setRecommendations(response.data)
+        setRecommendations(response.data);
       } catch (error) {
         console.error("Error:", error);
       }
@@ -171,7 +173,9 @@ function App() {
                   key={searchIndex}
                   onClick={() => onGameSelected(searchIndex, index)}
                 >
-                  {`${result.name} (${new Date(result.first_release_date * 1000).getFullYear()})`}
+                  {`${result.name} (${new Date(
+                    result.first_release_date * 1000
+                  ).getFullYear()})`}
                 </li>
               ))}
             </ul>
@@ -192,10 +196,9 @@ function App() {
         </button>
       )}
       <ol>
-      {recommendations.map((ratedGame, index) => (
-        <li key={index}>{ratedGame.game?.name}</li>
-      ))
-      }
+        {recommendations.map((ratedGame, index) => (
+          <li key={index}>{ratedGame.game?.name}</li>
+        ))}
       </ol>
     </>
   );
