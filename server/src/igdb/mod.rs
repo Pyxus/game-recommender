@@ -1,73 +1,12 @@
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::time::SystemTime;
+pub mod enums;
+
+#[allow(unused_imports)]
 use strum_macros::{EnumCount, EnumIter};
-
-#[repr(u64)]
-#[derive(Debug, Copy, Clone, EnumIter, EnumCount)]
-pub enum Genres {
-    PointAndClick = 2,
-    Fighting = 4,
-    Shooter = 5,
-    Music = 7,
-    Platform = 8,
-    Puzzle = 9,
-    Racing = 10,
-    RTS = 11,
-    RPG = 12,
-    Simulator = 13,
-    Sport = 14,
-    Strategy = 15,
-    TBS = 16,
-    Tactical = 24,
-    HackNSlash = 25,
-    Trivia = 26,
-    Pinball = 30,
-    Adventure = 31,
-    Indie = 32,
-    Arcade = 33,
-    VisualNovel = 34,
-    CardAndBoardGame = 35,
-    MOBA = 36,
-}
-
-#[repr(u64)]
-#[derive(Debug, Copy, Clone, EnumIter, EnumCount)]
-pub enum Themes {
-    Action = 1,
-    Fantasy = 17,
-    SciFi = 18,
-    Horror = 19,
-    Thriller = 20,
-    Survival = 21,
-    Historical = 22,
-    Stealth = 23,
-    Comedy = 27,
-    Business = 28,
-    Drama = 31,
-    NonFiction = 32,
-    Sandbox = 33,
-    Educational = 34,
-    Kids = 35,
-    OpenWorld = 38,
-    Warfare = 39,
-    Party = 40,
-    FourX = 41,
-    Erotic = 42,
-    Mystery = 43,
-    Romance = 44,
-}
-
-#[repr(u64)]
-#[derive(Debug, Copy, Clone, EnumIter, EnumCount)]
-pub enum PlayerPerspective {
-    FirstPerson = 1,
-    ThirdPerson = 2,
-    Isometric = 3,
-    SideView = 4,
-    Text = 5,
-    Auditory = 6,
-    VR = 7,
-}
+use dotenv::dotenv;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::env;
+use std::time::SystemTime;
+use crate::util::{comma_sep};
 
 #[derive(Clone, Serialize, Deserialize, Default, Debug)]
 pub struct Game {
@@ -86,12 +25,19 @@ pub struct Game {
     pub similar_games: Vec<Game>,
 }
 
-pub struct IGDBWrapper {
-    auth: Auth,
-    auth_refreshed_at: SystemTime,
-    client: reqwest::Client,
-    client_id: String,
-    client_secret: String,
+pub struct TwitchClient {
+    id: String,
+    secret: String,
+}
+
+impl TwitchClient {
+    pub fn from_dotenv(id_key: String, secret_key: String) -> TwitchClient {
+        dotenv().ok();
+        TwitchClient {
+            id: env::var(id_key).expect("Failed to get twitch client id from env."),
+            secret: env::var(secret_key).expect("Failed to get twitch client secret from env."),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -101,23 +47,31 @@ struct Auth {
     token_type: String,
 }
 
-impl IGDBWrapper {
-    pub fn new(client_id: String, client_secret: String) -> Self {
-        IGDBWrapper {
+pub struct IGDBClient {
+    auth: Auth,
+    auth_refreshed_at: SystemTime,
+    reqwest_client: reqwest::Client,
+    twitch_client: TwitchClient,
+}
+
+impl IGDBClient {
+    pub fn new(twitch_client: TwitchClient) -> Self {
+        IGDBClient {
             auth: Auth::default(),
             auth_refreshed_at: SystemTime::now(),
-            client: reqwest::Client::new(),
-            client_id,
-            client_secret,
+            reqwest_client: reqwest::Client::new(),
+            twitch_client
         }
     }
 
     pub async fn refresh_auth(&mut self) {
-        let client_id = &self.client_id;
-        let client_secret = &self.client_secret;
-        let params = format!("client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials");
+        let client_id = &self.twitch_client.id;
+        let client_secret = &self.twitch_client.secret;
+        let params = format!(
+            "client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials"
+        );
         let post = format!("https://id.twitch.tv/oauth2/token?{params}");
-        let post_result = self.client.post(post).send().await;
+        let post_result = self.reqwest_client.post(post).send().await;
 
         match post_result {
             Ok(response) => match response.json::<Auth>().await {
@@ -137,13 +91,13 @@ impl IGDBWrapper {
         body: &str,
     ) -> Result<T, reqwest::Error> {
         let response_result = self
-            .client
+            .reqwest_client
             .post(format!("https://api.igdb.com/v4/{end_point}"))
             .header(
                 "Authorization",
                 format!("{} {}", self.auth.token_type, self.auth.access_token),
             )
-            .header("Client-ID", &self.client_id)
+            .header("Client-ID", &self.twitch_client.id)
             .body(body.to_owned())
             .send()
             .await;
@@ -161,7 +115,7 @@ impl IGDBWrapper {
     }
 
     pub async fn find_similar_games(&self, game_ids: &Vec<u64>) -> Vec<Game> {
-        let where_game_id_str = self.comma_sep(game_ids, |gid| (**gid).to_string());
+        let where_game_id_str = comma_sep(game_ids, |gid| (**gid).to_string());
         let query =format!(
             "
             fields similar_games.name, similar_games.genres, similar_games.themes, similar_games.player_perspectives;
@@ -187,7 +141,7 @@ impl IGDBWrapper {
     }
 
     pub async fn find_games_from_ids(&self, game_ids: &Vec<u64>) -> Vec<Game> {
-        let where_ids = self.comma_sep(game_ids, |id| (**id).to_string());
+        let where_ids = comma_sep(game_ids, |id| (**id).to_string());
         let query = format!(
             "
             fields name, genres, themes, player_perspectives, first_release_date;
@@ -210,12 +164,17 @@ impl IGDBWrapper {
         }
     }
 
-    fn comma_sep<T, F, C>(&self, collection: C, f: F) -> String
-    where
-        F: FnMut(&T) -> String,
-        C: IntoIterator<Item = T>,
-    {
-        let coll_vec: Vec<T> = collection.into_iter().collect();
-        coll_vec.iter().map(f).collect::<Vec<String>>().join(", ")
+    pub async fn search_game(&self, name: &String) -> Result<Vec<Game>, reqwest::Error> {
+        let main_game = 0;
+        let query = format!(
+            r#"
+            fields name, first_release_date;
+            search "{name}";
+            where version_parent = null & category = {main_game} & first_release_date != null;
+            limit 20;
+            "#
+        );
+        let result = self.query::<Vec<Game>>("games", query.as_str()).await?;
+        Ok(result)
     }
 }

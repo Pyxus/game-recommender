@@ -1,4 +1,5 @@
-use super::igdb::{Genres, Game, IGDBWrapper, PlayerPerspective, Themes};
+use crate::igdb::{self, Game};
+use igdb::enums::{Genres, PlayerPerspective, Themes};
 use nalgebra::{Const, DVector, Dyn, Matrix, VecStorage};
 use nalgebra_sparse::{CooMatrix, CscMatrix};
 use serde::{Deserialize, Serialize};
@@ -11,43 +12,10 @@ pub struct RatedGame {
     pub rating: f64,
 }
 
-struct FeatureSet {
-    genres: HashSet<u64>,
-    themes: HashSet<u64>,
-    perspectives: HashSet<u64>,
-}
-
-pub async fn create_candidate_list(db: &IGDBWrapper, game_ids: &Vec<u64>) -> Vec<Game> {
-    let games = db.find_games_from_ids(&game_ids).await;
-    let similar_games = db.find_similar_games(&game_ids).await;
-    let feature_set = create_feature_set(&games);
-    let where_exlude_game_id = comma_sep(&similar_games, |game| game.id.to_string());
-    let where_genre_str = comma_sep(&feature_set.genres, |g| g.to_string());
-    let where_theme_str = comma_sep(&feature_set.themes, |g| g.to_string());
-    let where_perspective_str = comma_sep(&feature_set.perspectives, |g| g.to_string());
-    let query = format!(
-        "
-        fields name, genres, themes, player_perspectives;
-        where genres = 
-            ({where_genre_str}) 
-            & themes = ({where_theme_str}) 
-            & player_perspectives = ({where_perspective_str})
-            & id != ({where_exlude_game_id})
-            & rating > 6;
-        limit 500;
-        "
-    );
-    let query_result = db
-        .query::<Vec<Game>>("games", query.as_str())
-        .await;
-
-    match query_result {
-        Ok(mut candidate_games) => {
-            candidate_games.extend(similar_games);
-            candidate_games
-        },
-        Err(_) => vec![],
-    }
+pub struct FeatureSet {
+    pub genres: HashSet<u64>,
+    pub themes: HashSet<u64>,
+    pub perspectives: HashSet<u64>,
 }
 
 pub async fn create_feature_mat(games: &Vec<Game>) -> CscMatrix<f64> {
@@ -102,16 +70,7 @@ pub async fn calc_profile_mat(
     return user_profile;
 }
 
-fn comma_sep<T, F, C>(collection: C, f: F) -> String
-where
-    F: FnMut(&T) -> String,
-    C: IntoIterator<Item = T>,
-{
-    let coll_vec: Vec<T> = collection.into_iter().collect();
-    coll_vec.iter().map(f).collect::<Vec<String>>().join(", ")
-}
-
-fn create_feature_set(games: &Vec<Game>) -> FeatureSet {
+pub fn create_feature_set(games: &Vec<Game>) -> FeatureSet {
     let genres = games
         .iter()
         .flat_map(|game| game.genres.iter())

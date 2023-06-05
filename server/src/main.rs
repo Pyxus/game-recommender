@@ -3,13 +3,15 @@
 extern crate rocket;
 
 mod game_rec;
+mod igdb;
+mod util;
 
 use std::collections::HashMap;
 
 use futures::lock::Mutex;
 use game_rec::cb_filtering::RatedGame;
-use game_rec::igdb::Game;
 use game_rec::Recommender;
+use igdb::{Game, IGDBClient, TwitchClient};
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Header;
 use rocket::serde::json::Json;
@@ -17,7 +19,7 @@ use rocket::State;
 use rocket::{get, routes};
 use rocket::{Request, Response};
 
-pub struct CORS;
+struct CORS;
 
 #[rocket::async_trait]
 impl Fairing for CORS {
@@ -57,10 +59,10 @@ async fn recommend_games(
 }
 
 #[get("/search_games?<name>")]
-async fn search_games(name: String, rec_mutex: &State<Mutex<Recommender>>) -> Json<Vec<Game>> {
-    let recommender = rec_mutex.lock().await;
+async fn search_games(name: String, _rec_mutex: &State<Mutex<Recommender>>) -> Json<Vec<Game>> {
+    let recommender = _rec_mutex.lock().await;
 
-    match recommender.search_game(&name).await {
+    match recommender.get_igdb().search_game(&name).await {
         Ok(games) => Json(games),
         Err(error) => {
             eprintln!("Error searching for games: {:?}", error);
@@ -71,8 +73,14 @@ async fn search_games(name: String, rec_mutex: &State<Mutex<Recommender>>) -> Js
 
 #[launch]
 async fn rocket() -> _ {
-    let mut rec = Recommender::new();
-    rec.init().await;
+    let twitch_client = TwitchClient::from_dotenv(
+        String::from("TWITCH_CLIENT_ID"),
+        String::from("TWITCH_CLIENT_SECRET"),
+    );
+    let mut igdb_client = IGDBClient::new(twitch_client);
+    igdb_client.refresh_auth().await;
+
+    let rec = Recommender::new(igdb_client);
 
     rocket::build()
         .attach(CORS)
