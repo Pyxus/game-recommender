@@ -1,4 +1,4 @@
-# Game Reccomendation Tool
+# Game Recommendation Tool
 
 <p align="center">
     <img src="demo.gif" alt="Interpreter demo">
