@@ -1,4 +1,8 @@
-# game-recommender
+# Game Reccomendation Tool
+
+<p align="center">
+    <img src="demo.gif" alt="Interpreter demo">
+</p>
 
 Game recommendation tool. The user provides games they enjoy as an input and the server generates a list of recommended games using a content based filtering algorithm.
 
